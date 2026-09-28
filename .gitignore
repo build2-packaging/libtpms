@@ -7,3 +7,8 @@
 # Compilation database.
 #
 compile_commands.json
+
+# NVRAM state file libtpms writes to the current directory when a TPM 2
+# instance is initialized (e.g. by running the basics test).
+#
+NVChip
