@@ -1,6 +1,7 @@
 intf_libs = # Interface dependencies.
 impl_libs = # Implementation dependencies.
-#import xxxx_libs += libhello%lib{hello}
+
+import impl_libs += libcrypto%lib{crypto}
 
 # Public headers.
 #
@@ -14,20 +15,141 @@ lib{tpms}: $pub/{$pub_hdrs}
 
 # Private headers and sources as well as dependencies.
 #
-lib{tpms}: {h c}{**} $impl_libs $intf_libs
+# tpm12/tpm_crypto_freebl.c is the NSS/freebl crypto backend, unused since
+# this package builds with OpenSSL. tpm2/crypto/CryptRsa.c is an empty,
+# unreferenced file upstream does not build (tpm2/crypto/CryptRsa.h next
+# to it is a real, used header). compat/asprintf.c is only built where
+# needed (see below).
+#
+# The sources are grouped in a libul{} utility library (rather than being
+# direct prerequisites of lib{tpms}) so that def{tpms} below (Windows
+# symbol export list, MSVC only) has a pre-link object file list to work
+# from.
+#
+libul{tpms}: h{**} c{** -tpm12/tpm_crypto_freebl -tpm2/crypto/CryptRsa -compat/asprintf} \
+             $impl_libs $intf_libs
+
+libul{tpms}: c{compat/asprintf}: include = ($c.target.system == 'win32-msvc')
+
+lib{tpms}: libul{tpms}
 
 # Build options.
 #
+# The sources include the public headers with unqualified names, so the
+# libtpms/ directory is also on the private header search path.
+#
 out_pfx_inc = [dir_path] $out_root/include/
 src_pfx_inc = [dir_path] $src_root/include/
+out_pfx_unq = [dir_path] $out_root/include/libtpms/
+src_pfx_unq = [dir_path] $src_root/include/libtpms/
 out_pfx_src = [dir_path] $out_root/src/
 src_pfx_src = [dir_path] $src_root/src/
 
 c.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src" \
-              "-I$out_pfx_inc" "-I$src_pfx_inc"
+              "-I$out_pfx_inc" "-I$src_pfx_inc" \
+              "-I$out_pfx_unq" "-I$src_pfx_unq"
 
-#obja{*}: c.poptions += -DLIBTPMS_STATIC_BUILD
-#objs{*}: c.poptions += -DLIBTPMS_SHARED_BUILD
+c.poptions += -DTPM_LIBTPMS_CALLBACKS -DTPM_NV_DISK -DOPENSSL_SUPPRESS_DEPRECATED
+
+# Upstream's configure probes each of these individually (AC_CHECK_LIB
+# against libcrypto) and falls back to its own crypto-math implementation
+# per-primitive when a probe fails. On any OpenSSL >= 1.1.1 (this
+# package's depends floor, including 3.x, where the unsuffixed
+# EC_POINT_get_affine_coordinates used by the probe is the non-deprecated
+# replacement for the _GFp/_GF2m names) every probe succeeds, so these are
+# set unconditionally rather than genuinely probed: the autoconf module
+# only supports static platform/compiler checks, not linking against a
+# dependency to test for a symbol.
+#
+c.poptions += -DUSE_OPENSSL_FUNCTIONS_SYMMETRIC=1 -DUSE_OPENSSL_FUNCTIONS_EC=1 \
+              -DUSE_OPENSSL_FUNCTIONS_ECDSA=1 -DUSE_OPENSSL_FUNCTIONS_RSA=1 \
+              -DUSE_OPENSSL_FUNCTIONS_SSKDF=1 \
+              -DUSE_EC_POINT_GET_AFFINE_COORDINATES_API=1
+
+if ($c.class == 'msvc')
+  c.poptions += "/FI" "$src_base/tpm_library_conf.h"
+else
+  c.poptions += "-include" "$src_base/tpm_library_conf.h"
+
+# Some sources #include <endian.h/unistd.h/sys_time.h/netinet_in.h/
+# strings.h/alloca.h> unconditionally; compat/ supplies a stand-in where
+# the target lacks the real header, per the autoconf catalog (via
+# c.predefs below), not a raw header probe. HAVE_UNISTD_H/HAVE_SYS_TIME_H
+# are overridden in build/autoconf/checks/ for MinGW-w64 (has both,
+# unlike MSVC). HAVE_ALLOCA_H is project-local (no builtin entry).
+#
+using autoconf
+
+h{have-headers}: in{have-headers}
+{
+  install = false
+}
+
+[rule_hint=c.predefs] buildfile{have-headers}: h{have-headers} h{have-headers-dep}
+{
+  # h{have-headers-dep} must be listed: reached only via -I, not dep
+  # extraction, so dist would otherwise drop it. c.poptions is reset, not
+  # appended, to avoid leaking this file's other options into the probe.
+  # Variable names are lowercase so a safe default below can't shadow the
+  # real c.predefs.macros lookup (same name as the check = override).
+  #
+  c.predefs.poptions = true
+  c.poptions = "-I$src_base"
+  c.predefs.macros  = HAVE_ENDIAN_H@have_endian_h
+  c.predefs.macros += HAVE_UNISTD_H@have_unistd_h
+  c.predefs.macros += HAVE_SYS_TIME_H@have_sys_time_h
+  c.predefs.macros += HAVE_NETINET_IN_H@have_netinet_in_h
+  c.predefs.macros += HAVE_STRINGS_H@have_strings_h
+  c.predefs.macros += HAVE_ALLOCA_H@have_alloca_h
+}
+
+./: buildfile{have-headers}
+
+# Restores default-target registration for dist etc, otherwise lost once
+# any ./ prerequisite is declared explicitly (above).
+#
+./: lib{tpms}
+
+# Safe defaults for non-perform ops. Undefined check macros extract as
+# [null], not false, hence the explicit conversion below.
+#
+have_endian_h     = [bool] false
+have_unistd_h     = [bool] false
+have_sys_time_h   = [bool] false
+have_netinet_in_h = [bool] false
+have_strings_h    = [bool] false
+have_alloca_h     = [bool] false
+
+if ($build.meta_operation == 'perform')
+{
+  update buildfile{have-headers}
+  source $path(buildfile{have-headers})
+
+  have_endian_h     = ($have_endian_h     == 1 ? true : false)
+  have_unistd_h     = ($have_unistd_h     == 1 ? true : false)
+  have_sys_time_h   = ($have_sys_time_h   == 1 ? true : false)
+  have_netinet_in_h = ($have_netinet_in_h == 1 ? true : false)
+  have_strings_h    = ($have_strings_h    == 1 ? true : false)
+  have_alloca_h     = ($have_alloca_h     == 1 ? true : false)
+}
+
+if (!$have_endian_h)
+  c.poptions += "-I$src_base/compat/endian"
+
+if (!$have_unistd_h)
+  c.poptions += "-I$src_base/compat/unistd"
+
+if (!$have_sys_time_h)
+  c.poptions += "-I$src_base/compat/sys_time"
+
+if (!$have_netinet_in_h)
+  c.poptions += "-I$src_base/compat/netinet_in"
+
+if (!$have_strings_h)
+  c.poptions += "-I$src_base/compat/strings"
+
+if (!$have_alloca_h)
+  c.poptions += "-I$src_base/compat/alloca"
 
 # Export options.
 #
@@ -36,18 +158,6 @@ lib{tpms}:
   c.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"
   c.export.libs = $intf_libs
 }
-
-#liba{tpms}: c.export.poptions += -DLIBTPMS_STATIC
-#libs{tpms}: c.export.poptions += -DLIBTPMS_SHARED
-
-# For pre-releases use the complete version to make sure they cannot
-# be used in place of another pre-release or the final version. See
-# the version module for details on the version.* variable values.
-#
-if $version.pre_release
-  lib{tpms}: bin.lib.version = "-$version.project_id"
-else
-  lib{tpms}: bin.lib.version = "-$version.major.$version.minor"
 
 # Don't install private headers.
 #
