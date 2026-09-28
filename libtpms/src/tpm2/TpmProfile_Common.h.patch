@@ -1,0 +1,11 @@
+--- TpmProfile_Common.h.orig	2026-09-26 17:07:27 +0200
++++ TpmProfile_Common.h	2026-09-26 17:41:44 +0200
+@@ -106,6 +106,8 @@
+  #endif
+ #elif defined __APPLE__
+  #define  BIG_ENDIAN_TPM       NO
++#elif defined _WIN32
++ #define  BIG_ENDIAN_TPM       NO
+ #else
+  #error Unsupported OS
+ #endif                                             /* libtpms added end */
