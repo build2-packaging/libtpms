@@ -1,0 +1,11 @@
+--- tpm_library.h.in.orig	2026-09-26 17:07:27 +0200
++++ tpm_library.h.in	2026-09-28 15:28:41 +0200
+@@ -42,7 +42,7 @@
+ #include <stdint.h>
+ #include <sys/types.h>
+ 
+-#include "tpm_types.h"
++#include <libtpms/tpm_types.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
