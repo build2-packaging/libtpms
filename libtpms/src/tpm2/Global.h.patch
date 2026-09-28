@@ -1,0 +1,14 @@
+--- Global.h.orig	2026-09-26 17:07:27 +0200
++++ Global.h	2026-09-26 19:48:36 +0200
+@@ -796,7 +796,11 @@
+ {
+     // data provided by the platform library during manufacturing.
+     // Opaque to the TPM Core library, but may be used by the platform library.
++#if defined(_MSC_VER) && !defined(__clang__)
++    BYTE platformReserved[PERSISTENT_DATA_PLATFORM_SPACE ? PERSISTENT_DATA_PLATFORM_SPACE : 1];
++#else
+     BYTE platformReserved[PERSISTENT_DATA_PLATFORM_SPACE];
++#endif
+     
+     //*********************************************************************************
+     //          Hierarchy
