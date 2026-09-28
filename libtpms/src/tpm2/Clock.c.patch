@@ -1,0 +1,37 @@
+--- Clock.c.orig	2026-09-26 17:07:27 +0200
++++ Clock.c	2026-09-26 19:46:45 +0200
+@@ -68,6 +68,12 @@
+ 
+ //** Includes and Data Definitions
+ #include <assert.h>
++#ifdef TPM_WINDOWS
++#ifndef WIN32_LEAN_AND_MEAN
++#define WIN32_LEAN_AND_MEAN
++#endif
++#include <windows.h>
++#endif
+ #include "Platform.h"
+ 
+ // CLOCK_NOMINAL is the number of hardware ticks per ms. A value of 30000 means
+@@ -98,7 +104,20 @@
+ {
+     uint64_t           time;
+ #ifdef TPM_WINDOWS
+-#error Not supported for TPM_WINDOWS
++    if (clk_id == CLOCK_MONOTONIC) {
++        time = (uint64_t)GetTickCount64();
++    } else {
++        /* FILETIME ticks are in 100ns units since 1601-01-01; convert to
++         * milliseconds since the Unix epoch (1970-01-01).
++         */
++        static const unsigned __int64 epoch_diff = 116444736000000000ULL;
++        FILETIME ft;
++        unsigned __int64 ticks;
++
++        GetSystemTimeAsFileTime(&ft);
++        ticks = ((unsigned __int64)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
++        time = (uint64_t)((ticks - epoch_diff) / 10000);
++    }
+ #else
+     struct timespec     systime;
+ 
