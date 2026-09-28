@@ -1,16 +1,23 @@
 : 1
 name: libtpms
-version: 0.1.0-a.0.z
+version: 0.10.2-a.0.z
 language: c
-project: build2-libtpms
-summary: tpms C library
-license: BSD-3-Clause ; BSD 3-Clause "New" or "Revised" License.
+project: libtpms
+summary: TPM 1.2 and TPM 2.0 software emulation library
+topics: tpm, tpm2, tss, security, c
+license: BSD-3-Clause, other: TCG TPM2 specification license ; Per TPM version.
 description-file: README.md
 package-description-file: PACKAGE-README.md
 changes-file: CHANGELOG.md
-url: https://example.org/upstream
-email: upstream@example.org
-package-url: https://github.com/build2-packaging/build2-libtpms
+url: https://github.com/stefanberger/libtpms
+src-url: https://github.com/stefanberger/libtpms
+package-url: https://github.com/build2-packaging/libtpms
 package-email: packaging@build2.org ; Mailing list.
 depends: * build2 >= 0.18.0
 depends: * bpkg >= 0.18.0
+depends: libcrypto >= 1.1.1
+build-include: linux**
+build-include: *bsd**
+build-include: macos**
+build-include: windows**
+build-exclude: ** ; Only Linux, the BSDs, macOS, and Windows are supported.
