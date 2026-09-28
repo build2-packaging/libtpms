@@ -1,0 +1,22 @@
+--- TpmFail.c.orig	2026-09-26 17:07:27 +0200
++++ TpmFail.c	2026-09-26 19:50:50 +0200
+@@ -211,15 +211,12 @@
+ #endif
+     s_failCode = code;
+ 
+-    TPMLIB_LogTPM2Error("Entering failure mode; code: %d"
+ #if FAIL_TRACE
+-    ", location: %s line %d"
++    TPMLIB_LogTPM2Error("Entering failure mode; code: %d, location: %s line %d\n",
++                        s_failCode, function, s_failLine);
++#else
++    TPMLIB_LogTPM2Error("Entering failure mode; code: %d\n", s_failCode);
+ #endif
+-    "\n", s_failCode
+-#if FAIL_TRACE
+-    , function, s_failLine
+-#endif
+-    );
+ 
+     // We are in failure mode
+     g_inFailureMode = TRUE;
