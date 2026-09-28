@@ -1,0 +1,323 @@
+--- RuntimeProfile.c.orig	2026-09-26 17:07:27 +0200
++++ RuntimeProfile.c	2026-09-27 22:15:25 +0200
+@@ -41,14 +41,53 @@
+ 
+ #define _GNU_SOURCE
+ #include <assert.h>
++#include <ctype.h>
+ #include <errno.h>
+ #include <stdio.h>
+-#include <regex.h>
+ #include <limits.h>
++#include <strings.h>
+ 
+ #include "Tpm.h"
+ #include "tpm_library_intern.h"
+ 
++#if defined(_MSC_VER)
++static char *
++strndup(const char *s, size_t n)
++{
++    size_t len = strnlen(s, n);
++    char *r = malloc(len + 1);
++
++    if (r) {
++        memcpy(r, s, len);
++        r[len] = '\0';
++    }
++    return r;
++}
++#elif defined(__MINGW32__)
++/* Some mingw-w64 toolchain builds gate strndup() behind a narrower or
++ * different set of feature-test macros than others do: a real CI
++ * mingw-w64 bot fails here with an implicit-declaration error even with
++ * _GNU_SOURCE defined (above), while the local MSYS2 UCRT64 toolchain
++ * already exposes it under that same macro. Redirect to our own
++ * implementation unconditionally, rather than trying to detect
++ * availability, so this doesn't conflict with a real declaration on a
++ * toolchain build that does provide one.
++ */
++#define strndup libtpms_runtimeprofile_strndup
++static char *
++libtpms_runtimeprofile_strndup(const char *s, size_t n)
++{
++    size_t len = strnlen(s, n);
++    char *r = malloc(len + 1);
++
++    if (r) {
++        memcpy(r, s, len);
++        r[len] = '\0';
++    }
++    return r;
++}
++#endif
++
+ struct RuntimeProfile g_RuntimeProfile;
+ 
+ const char defaultCommandsProfile[] =
+@@ -215,27 +254,81 @@
+ 				     stateFormatLevel, maxStateFormatLevel);
+ }
+ 
++static bool
++json_skip_map_entry(const char **pp)
++{
++    const char *p = *pp;
++
++    while (isspace((unsigned char)*p))
++        p++;
++    if (*p != '"')
++        return false;
++    p++;
++    if (*p == '"')
++        return false; /* key must be non-empty */
++    while (*p != '"') {
++        if (*p == '\0')
++            return false;
++        p++;
++    }
++    p++;
++
++    while (isspace((unsigned char)*p))
++        p++;
++    if (*p != ':')
++        return false;
++    p++;
++    while (isspace((unsigned char)*p))
++        p++;
++
++    if (*p == '"') {
++        p++;
++        while (*p != '"') {
++            if (*p == '\0')
++                return false;
++            p++;
++        }
++        p++;
++    } else if (isdigit((unsigned char)*p)) {
++        while (isdigit((unsigned char)*p))
++            p++;
++    } else {
++        return false;
++    }
++
++    while (isspace((unsigned char)*p))
++        p++;
++
++    *pp = p;
++    return true;
++}
++
+ static TPM_RC
+ RuntimeProfileCheckJSON(const char *json)
+ {
+-#define MAP_ENTRY_REGEX "[[:space:]]*\"[^\"]+\"[[:space:]]*:[[:space:]]*(\"[^\"]*\"|[[:digit:]]+)[[:space:]]*"
+-    const char *regex = "^\\{[[:space:]]*("MAP_ENTRY_REGEX")?(,"MAP_ENTRY_REGEX")*\\}$";
+-#undef MAP_ENTRY_REGEX
+-    TPM_RC retVal;
+-    regex_t r;
++    const char *p = json;
+ 
+-    if (regcomp(&r, regex, REG_EXTENDED|REG_NOSUB) != 0)
+-	return TPM_RC_FAILURE;
+-
+-    if (regexec(&r, json, 0, NULL, 0) == REG_NOMATCH) {
+-	retVal = TPM_RC_NO_RESULT;
+-	goto exit;
++    if (*p != '{')
++        return TPM_RC_NO_RESULT;
++    p++;
++
++    while (isspace((unsigned char)*p))
++        p++;
++
++    if (*p != '}') {
++        if (!json_skip_map_entry(&p))
++            return TPM_RC_NO_RESULT;
++        while (*p == ',') {
++            p++;
++            if (!json_skip_map_entry(&p))
++                return TPM_RC_NO_RESULT;
++        }
++        if (*p != '}')
++            return TPM_RC_NO_RESULT;
+     }
+-    retVal = TPM_RC_SUCCESS;
++    p++;
+ 
+-exit:
+-    regfree(&r);
+-    return retVal;
++    return *p == '\0' ? TPM_RC_SUCCESS : TPM_RC_NO_RESULT;
+ }
+ 
+ /*
+@@ -303,53 +396,70 @@
+ 
+ static TPM_RC
+ RuntimeProfileGetFromJSON(const char  *json,
+-			  const char  *regex,
++			  const char  *key,
++			  bool         numeric,
+ 			  char       **value,
+ 			  bool         removeDuplicates,
+ 			  bool         allowEmptyResult)
+ {
+-    regmatch_t match[2];
+-    TPM_RC retVal;
+-    regex_t r;
+-
+-    if (regcomp(&r, regex, REG_EXTENDED) != 0)
+-	return TPM_RC_FAILURE;
++    char needle[32];
++    const char *start, *p;
++    size_t len;
+ 
+-    if (regexec(&r, json, 2, match, 0) == REG_NOMATCH) {
+-	retVal = TPM_RC_NO_RESULT;
+-	goto exit;
++    snprintf(needle, sizeof(needle), "\"%s\"", key);
++    p = strstr(json, needle);
++    if (!p)
++	return TPM_RC_NO_RESULT;
++    p += strlen(needle);
++
++    while (isspace((unsigned char)*p))
++        p++;
++    if (*p != ':')
++	return TPM_RC_NO_RESULT;
++    p++;
++    while (isspace((unsigned char)*p))
++        p++;
++
++    if (numeric) {
++        start = p;
++        while (isdigit((unsigned char)*p))
++            p++;
++        if (p == start)
++            return TPM_RC_NO_RESULT;
++    } else {
++        if (*p != '"')
++            return TPM_RC_NO_RESULT;
++        p++;
++        start = p;
++        while (*p != '"') {
++            if (*p == '\0')
++                return TPM_RC_NO_RESULT;
++            p++;
++        }
+     }
++    len = (size_t)(p - start);
+ 
+-    if (match[1].rm_eo - match[1].rm_so == 0 && !allowEmptyResult) {
+-	retVal = TPM_RC_SIZE;
+-	goto exit;
+-    }
++    if (len == 0 && !allowEmptyResult)
++	return TPM_RC_SIZE;
+ 
+-    *value = strndup(&json[match[1].rm_so], match[1].rm_eo - match[1].rm_so);
++    *value = strndup(start, len);
+     if (removeDuplicates)
+         RuntimeProfileDedupStrItems(*value);
+ 
+-    if (*value == NULL) {
+-	retVal= TPM_RC_MEMORY;
+-	goto exit;
+-    }
+-    retVal = TPM_RC_SUCCESS;
+-
+-exit:
+-    regfree(&r);
++    if (*value == NULL)
++	return TPM_RC_MEMORY;
+ 
+-    return retVal;
++    return TPM_RC_SUCCESS;
+ }
+ 
+ static TPM_RC
+ RuntimeProfileGetNameFromJSON(const char  *json,
+ 			      char       **name)
+ {
+-    const char *regex = "^\\{.*[[:space:]]*\"Name\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*\\}$";
+     TPM_RC retVal;
+     size_t len;
+ 
+-    retVal = RuntimeProfileGetFromJSON(json, regex, name, false, false);
++    retVal = RuntimeProfileGetFromJSON(json, "Name", false, name, false, false);
+     if (!retVal) {
+         len = strlen(*name);
+         if (len > MAX_PROFILE_NAME_LEN)
+@@ -363,11 +473,10 @@
+ RuntimeProfileGetDescriptionFromJSON(const char  *json,
+ 				     char       **description)
+ {
+-    const char *regex = "^\\{.*[[:space:]]*\"Description\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*\\}$";
+     TPM_RC retVal;
+     size_t len;
+ 
+-    retVal = RuntimeProfileGetFromJSON(json, regex, description, false, false);
++    retVal = RuntimeProfileGetFromJSON(json, "Description", false, description, false, false);
+     if (retVal == TPM_RC_NO_RESULT) {
+ 	*description = NULL;
+ 	return TPM_RC_SUCCESS;
+@@ -384,12 +493,11 @@
+ GetStateFormatLevelFromJSON(const char   *json,
+ 			    unsigned int *stateFormatLevel)
+ {
+-    const char *regex = "^\\{.*[[:space:]]*\"StateFormatLevel\"[[:space:]]*:[[:space:]]*([0-9]+).*\\}$";
+     char *str = NULL;
+     unsigned long v;
+     TPM_RC retVal;
+ 
+-    retVal = RuntimeProfileGetFromJSON(json, regex, &str, false, false);
++    retVal = RuntimeProfileGetFromJSON(json, "StateFormatLevel", true, &str, false, false);
+     if (retVal)
+ 	return retVal;
+ 
+@@ -412,10 +520,9 @@
+ GetAlgorithmsProfileFromJSON(const char  *json,
+ 			     char       **algorithmsProfile)
+ {
+-    const char *regex = "^\\{.*[[:space:]]*\"Algorithms\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*\\}$";
+     TPM_RC retVal;
+ 
+-    retVal = RuntimeProfileGetFromJSON(json, regex, algorithmsProfile, true, false);
++    retVal = RuntimeProfileGetFromJSON(json, "Algorithms", false, algorithmsProfile, true, false);
+     if (retVal == TPM_RC_NO_RESULT) {
+ 	*algorithmsProfile = NULL;
+ 	retVal = 0;
+@@ -429,10 +536,9 @@
+ 			     char       **attributesProfile
+ 			     )
+ {
+-    const char *regex = "^\\{.*[[:space:]]*\"Attributes\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*\\}$";
+     TPM_RC retVal;
+ 
+-    retVal = RuntimeProfileGetFromJSON(json, regex, attributesProfile, true, true);
++    retVal = RuntimeProfileGetFromJSON(json, "Attributes", false, attributesProfile, true, true);
+     if (retVal == TPM_RC_NO_RESULT) {
+ 	*attributesProfile = NULL;
+ 	retVal = 0;
+@@ -444,10 +550,9 @@
+ GetCommandsProfileFromJSON(const char  *json,
+ 			   char       **commandsProfile)
+ {
+-    const char *regex = "^\\{.*[[:space:]]*\"Commands\"[[:space:]]*:[[:space:]]*\"([^\"]+)\".*\\}$";
+     TPM_RC retVal;
+ 
+-    retVal = RuntimeProfileGetFromJSON(json, regex, commandsProfile, true, false);
++    retVal = RuntimeProfileGetFromJSON(json, "Commands", false, commandsProfile, true, false);
+     if (retVal == TPM_RC_NO_RESULT) {
+ 	*commandsProfile = NULL;
+ 	retVal = 0;
+@@ -965,7 +1070,7 @@
+     case 1: /* profile runs on v0.9 */
+ 	return SEED_COMPAT_LEVEL_RSA_PRIME_ADJUST_FIX;
+ 
+-    case 2 ... 7: /* profile runs on v0.10 */ {
++    case 2: case 3: case 4: case 5: case 6: case 7: /* profile runs on v0.10 */ {
+ 	MUST_BE(STATE_FORMAT_LEVEL_CURRENT == 7); // force update when this changes
+ 	return SEED_COMPAT_LEVEL_LAST;
+     }
