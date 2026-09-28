@@ -1,6 +1,28 @@
-pub_hdrs = h{**}
+using in
+
+pub_hdrs = h{**} h{tpm_library}
 
 ./: $pub_hdrs
+
+# Generated from upstream's own tpm_library.h.in template, substituting
+# this project's version. Upstream also ships a pre-substituted copy
+# committed to git; that copy is only valid for the exact release it was
+# committed at, so it is not used here.
+#
+[rule_hint=in] h{tpm_library}: in{tpm_library}
+{
+  in.symbol = '@'
+  in.mode   = lax
+
+  LIBTPMS_VER_MAJOR = $version.major
+  LIBTPMS_VER_MINOR = $version.minor
+  LIBTPMS_VER_MICRO = $version.patch
+}
+
+# The .orig pristine-copy symlink and the generated .patch file don't
+# match h{}/in{}, so dist would otherwise drop them.
+#
+h{tpm_library}: file{tpm_library.h.in.orig} file{tpm_library.h.in.patch}: include = adhoc
 
 # Install into the libtpms/ subdirectory of, say, /usr/include/
 # recreating subdirectories.
