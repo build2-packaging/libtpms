@@ -1,0 +1,42 @@
+--- tpm_library.c.orig	2026-09-26 17:07:27 +0200
++++ tpm_library.c	2026-09-27 22:11:25 +0200
+@@ -52,6 +52,39 @@
+ #include <unistd.h>
+ #include <stdbool.h>
+ 
++#if defined(__MINGW32__)
++/* mingw-w64 provides neither dprintf() nor vdprintf() at all (unlike
++ * FreeBSD/glibc, which have them but gate them behind a feature-test
++ * macro, see _WITH_DPRINTF/_GNU_SOURCE above) -- implement both in terms
++ * of vsnprintf() and mingw's own write() (aliased to the Microsoft CRT's
++ * _write(), already available via the <unistd.h> included above).
++ */
++static int
++vdprintf(int fd, const char *format, va_list args)
++{
++    char buffer[1024];
++    int n = vsnprintf(buffer, sizeof(buffer), format, args);
++
++    if (n < 0)
++        return n;
++    if ((size_t)n >= sizeof(buffer))
++        n = (int)sizeof(buffer) - 1;
++    return write(fd, buffer, (unsigned int)n);
++}
++
++static int
++dprintf(int fd, const char *format, ...)
++{
++    va_list args;
++    int n;
++
++    va_start(args, format);
++    n = vdprintf(fd, format, args);
++    va_end(args);
++    return n;
++}
++#endif
++
+ #ifdef USE_FREEBL_CRYPTO_LIBRARY
+ # include <plbase64.h>
+ #endif
