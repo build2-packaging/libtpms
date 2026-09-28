@@ -1,0 +1,16 @@
+--- Utils.h.orig	2026-09-26 17:07:27 +0200
++++ Utils.h	2026-09-26 19:47:58 +0200
+@@ -44,7 +44,12 @@
+ #define TPM2_ROUNDUP(VAL, SIZE) \
+   ( ( (VAL) + (SIZE) - 1) / (SIZE) ) * (SIZE)
+ 
+-__attribute__((unused)) static inline void clear_and_free(void *ptr, size_t size) {
++#if defined(_MSC_VER) && !defined(__clang__)
++static inline void clear_and_free(void *ptr, size_t size)
++#else
++__attribute__((unused)) static inline void clear_and_free(void *ptr, size_t size)
++#endif
++{
+     if (ptr) {
+         MemorySet(ptr, 0, size);
+         free(ptr);
