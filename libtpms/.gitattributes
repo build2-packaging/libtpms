@@ -1,1 +1,2 @@
 src/tpm12 symlink=dir
+tests/unit/inputs/*.bin binary

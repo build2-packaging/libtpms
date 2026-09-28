@@ -1,0 +1,1 @@
+../../../upstream/tests/tpm2_setprofile.c

@@ -1,0 +1,27 @@
+: tiny
+{
+  ln -s $src_base/inputs/tiny.input tiny.input
+  ln -s $src_base/inputs/tiny.bin tiny.bin
+  $0 tiny.input tiny.bin
+}
+
+: small
+{
+  ln -s $src_base/inputs/small.input small.input
+  ln -s $src_base/inputs/small.bin small.bin
+  $0 small.input small.bin
+}
+
+: medium
+{
+  ln -s $src_base/inputs/medium.input medium.input
+  ln -s $src_base/inputs/medium.bin medium.bin
+  $0 medium.input medium.bin
+}
+
+: large
+{
+  ln -s $src_base/inputs/large.input large.input
+  ln -s $src_base/inputs/large.bin large.bin
+  $0 large.input large.bin
+}

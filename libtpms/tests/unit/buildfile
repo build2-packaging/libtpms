@@ -1,0 +1,33 @@
+import libs = libtpms%lib{tpms}
+
+for t: c{* -checksize -base64decode}
+{
+  n = $name($t)
+
+  exe{$n}: $t $libs testscript{run-test}
+  exe{$n}: exe{checksize}: include = adhoc
+}
+
+exe{checksize}: c{checksize}
+exe{checksize}: test = false
+
+./: exe{base64decode}: c{base64decode} $libs testscript{base64decode}
+exe{base64decode}: file{inputs/**}: include = adhoc
+
+# base64decode.c #includes <unistd.h> unconditionally but uses none of its
+# declarations; MSVC has no unistd.h of its own. h{} is adhoc (tracked for
+# dist, not a compile input) since it is reached via -I, not #include, and
+# only on MSVC; see below.
+#
+exe{base64decode}: h{compat/unistd/unistd}: include = adhoc
+
+if ($c.target.system == 'win32-msvc')
+  exe{base64decode}: c.poptions += "-I$src_base/compat/unistd"
+
+# tpm2_setprofile and the two CVE regression tests pull in <arpa/inet.h> for
+# ntohl. Every POSIX target provides it. Neither MSVC nor mingw-w64 do.
+#
+./: exe{tpm2_selftest} exe{tpm2_createprimary} exe{tpm2_pcr_read}
+./: exe{tpm2_setprofile}: include = ($c.target.class != 'windows')
+./: exe{tpm2_cve-2023-1017}: include = ($c.target.class != 'windows')
+./: exe{tpm2_cve-2023-1018}: include = ($c.target.class != 'windows')
