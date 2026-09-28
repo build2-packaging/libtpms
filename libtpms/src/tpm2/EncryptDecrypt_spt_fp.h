@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/EncryptDecrypt_spt_fp.h

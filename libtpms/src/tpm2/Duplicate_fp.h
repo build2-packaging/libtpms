@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/Duplicate_fp.h

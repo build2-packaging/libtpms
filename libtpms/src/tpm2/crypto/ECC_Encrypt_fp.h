@@ -1,0 +1,1 @@
+../../../../upstream/src/tpm2/crypto/ECC_Encrypt_fp.h

@@ -1,0 +1,1 @@
+../../../../upstream/src/tpm2/crypto/CryptSmac_fp.h

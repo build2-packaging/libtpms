@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/NV_ReadPublic2_fp.h

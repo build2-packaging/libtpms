@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/NV_ReadLock_fp.h

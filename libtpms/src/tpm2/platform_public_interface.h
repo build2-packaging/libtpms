@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/platform_public_interface.h

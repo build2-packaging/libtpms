@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/EC_Ephemeral_fp.h

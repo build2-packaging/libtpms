@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/PCR_Reset_fp.h

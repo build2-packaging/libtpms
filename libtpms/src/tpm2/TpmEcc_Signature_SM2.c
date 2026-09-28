@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/TpmEcc_Signature_SM2.c

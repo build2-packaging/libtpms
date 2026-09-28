@@ -1,0 +1,1 @@
+../../../upstream/src/tpm2/ReadPublic_fp.h
