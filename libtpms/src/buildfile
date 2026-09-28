@@ -151,6 +151,37 @@ if (!$have_strings_h)
 if (!$have_alloca_h)
   c.poptions += "-I$src_base/compat/alloca"
 
+# The upstream sources cast function pointers between incompatible types
+# (callback tables), leave a couple of parameters and struct fields
+# intentionally unused, and are not written to be -Wpedantic-clean.
+#
+if ($c.class != 'msvc')
+  c.coptions += -Wno-cast-function-type -Wno-unused-parameter \
+                -Wno-missing-field-initializers
+
+# GCC misjudges the write size through a TPM2B_*-style buffer pointer
+# (a concretely-sized struct aliased, via union, with TPMB.h's generic
+# one-byte-array TPM2B view) as 0 in AlgorithmTests.c's MakeIv().
+#
+if ($c.id == 'gcc')
+  c.coptions += -Wno-stringop-overflow
+
+# The TPM 1.2 DAA code (tpm_daa.c) marks unused parameters by assigning
+# them to themselves (e.g. "outputData = outputData;"), which Clang
+# flags but GCC does not.
+#
+if ($c.id.type == 'clang')
+  c.coptions += -Wno-self-assign
+
+# GCC (and clang) on mingw32 check TPMLIB_LogPrintfA's plain "printf"
+# format attribute (compiler.h) against the legacy MS-CRT archetype (no
+# %z), not the ANSI-compatible printf mingw-w64 actually ships, so any
+# %z/64-bit conversion through TPMLIB_LogError et al. is flagged as a
+# false positive.
+#
+if ($c.target.system == 'mingw32')
+  c.coptions += -Wno-format
+
 # TPM 1.2 support.
 #
 tpm12/obj{**}: c.poptions += -DTPM_V12 -DTPM_PCCLIENT -DTPM_VOLATILE_LOAD \
