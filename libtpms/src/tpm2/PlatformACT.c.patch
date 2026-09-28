@@ -1,0 +1,14 @@
+--- PlatformACT.c.orig	2026-09-26 17:07:27 +0200
++++ PlatformACT.c	2026-09-26 19:48:18 +0200
+@@ -158,7 +158,11 @@
+ /* C.16.2.2.	ActGetDataPointer() */
+ static P_ACT_DATA
+ ActGetDataPointer(
++#if defined(_MSC_VER) && !defined(__clang__)
++		  uint32_t            act
++#else
+ 		  uint32_t            act __attribute__((unused))
++#endif
+ 		  )
+ {
+     
