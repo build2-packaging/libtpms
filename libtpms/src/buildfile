@@ -151,6 +151,46 @@ if (!$have_strings_h)
 if (!$have_alloca_h)
   c.poptions += "-I$src_base/compat/alloca"
 
+# TPM 1.2 support.
+#
+tpm12/obj{**}: c.poptions += -DTPM_V12 -DTPM_PCCLIENT -DTPM_VOLATILE_LOAD \
+                          -DTPM_ENABLE_ACTIVATE -DTPM_AES -DTPM_POSIX \
+                          -DTPM_NOMAINTENANCE_COMMANDS
+obj{tpm_tpm12_*}: c.poptions += -DTPM_V12 -DTPM_PCCLIENT -DTPM_VOLATILE_LOAD \
+                          -DTPM_ENABLE_ACTIVATE -DTPM_AES -DTPM_POSIX \
+                          -DTPM_NOMAINTENANCE_COMMANDS
+
+# TPM 2 support.
+#
+tpm2/obj{**}: c.poptions += "-I$src_base" \
+                         "-I$src_base/crypto" "-I$src_base/crypto/openssl"
+obj{tpm_tpm2_*}: c.poptions += "-I$src_base/tpm2" \
+                         "-I$src_base/tpm2/crypto" "-I$src_base/tpm2/crypto/openssl"
+
+# Unlike TPM 1.2 above, upstream does have a (real, if partial) TPM_WINDOWS
+# path for the TPM 2 code, used here in place of TPM_POSIX on every target
+# that lacks POSIX headers of its own (MSVC, clang in MSVC-compatibility
+# mode, and MinGW: none of them define any of __linux__/__CYGWIN__/BSD/
+# __APPLE__, which is what upstream's own platform checks key off).
+#
+if ($c.target.class == 'windows')
+  tpm2_platform = -DTPM_WINDOWS
+else
+  tpm2_platform = -D_POSIX_ -DTPM_POSIX
+
+tpm2/obj{**} obj{tpm_tpm2_*}: c.poptions += $tpm2_platform
+
+if ($c.target.class == 'windows')
+{
+  if ($c.target.system == 'mingw32')
+    c.libs += -lws2_32
+  else
+    c.libs += ws2_32.lib
+}
+
+#obja{*}: c.poptions += -DLIBTPMS_STATIC_BUILD
+#objs{*}: c.poptions += -DLIBTPMS_SHARED_BUILD
+
 # Export options.
 #
 lib{tpms}:
@@ -158,6 +198,53 @@ lib{tpms}:
   c.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"
   c.export.libs = $intf_libs
 }
+
+#liba{tpms}: c.export.poptions += -DLIBTPMS_STATIC
+#libs{tpms}: c.export.poptions += -DLIBTPMS_SHARED
+
+# BnEccConstants.c includes this directly; it doesn't match c{}/h{} so dist
+# would otherwise drop it.
+#
+lib{tpms}: file{tpm2/EccConstantData.inl}: include = adhoc
+
+# The upstream-patch documentation trail (see the "Patch <file>" commits):
+# neither the .orig pristine-copy symlinks nor the generated .patch files
+# match c{}/h{}, so dist would otherwise drop all of them.
+#
+lib{tpms}: file{**.orig}: include = adhoc
+lib{tpms}: file{**.patch}: include = adhoc
+
+# Only export the public API from the shared library on ELF targets.
+#
+lib{tpms}: file{libtpms.syms}: include = adhoc
+
+if ($c.target.class == 'linux' || $c.target.class == 'bsd')
+  libs{tpms}: c.loptions += "-Wl,--version-script=$src_base/libtpms.syms"
+
+libs{tpms}: def{tpms}: include = ($c.target.system == 'win32-msvc')
+def{tpms}: libul{tpms}
+
+if ($c.target.system == 'mingw32')
+  c.loptions += -Wl,--export-all-symbols
+
+# For pre-releases use the complete version to make sure they cannot
+# be used in place of another pre-release or the final version. See
+# the version module for details on the version.* variable values.
+#
+# A final release uses the same shared library name as upstream (libtool
+# version-info 10:2:10): libtpms.so.0.10.2 with SONAME libtpms.so.0 on
+# Linux, libtpms.so.0 on BSD, and libtpms.0.dylib on macOS. linux@ needs
+# MAJOR.MINOR[.EXTRA], macos@ and bsd@ are not implemented, so the BSD
+# name is set through the extension.
+#
+if $version.pre_release
+  lib{tpms}: bin.lib.version = "-$version.project_id"
+elif ($c.target.class == 'macos')
+  lib{tpms}: bin.lib.version = ".0"
+elif ($c.target.class == 'bsd')
+  libs{tpms}: extension = "so.0"
+else
+  lib{tpms}: bin.lib.version = "-0" linux@"0.10.2"
 
 # Don't install private headers.
 #
