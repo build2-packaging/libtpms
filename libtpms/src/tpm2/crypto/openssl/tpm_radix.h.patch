@@ -1,0 +1,18 @@
+--- tpm_radix.h.orig	2026-09-26 17:07:27 +0200
++++ tpm_radix.h	2026-09-26 19:44:49 +0200
+@@ -70,12 +70,12 @@
+ # ifdef SIXTY_FOUR_BIT_LONG
+ #  define RADIX_BITS                     64
+ # endif
++# ifdef SIXTY_FOUR_BIT
++#  define RADIX_BITS                     64
++# endif
+ # ifndef RADIX_BITS
+ #  error Need to determine RADIX_BITS value
+ # endif
+-#endif
+-#ifdef TPM_WINDOWS
+-#define  RADIX_BITS                      32
+ #endif                                 // libtpms added end
+ 
+ #ifndef RADIX_BITS
