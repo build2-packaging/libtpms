@@ -1,0 +1,137 @@
+--- NVMarshal.c.orig	2026-09-26 17:07:27 +0200
++++ NVMarshal.c	2026-09-27 20:16:56 +0200
+@@ -38,6 +38,12 @@
+ 
+ #include <string.h>
+ #include <inttypes.h>
++#include <stdlib.h>
++#if defined(_WIN32)
++#include <malloc.h>
++#else
++#include <alloca.h>
++#endif
+ 
+ #include "assert.h"
+ 
+@@ -78,7 +84,7 @@
+ 
+ /* prevent misconfiguration: */
+ typedef char assertion_failed_nvram[
+-    (NV_USER_DYNAMIC_END < NV_USER_DYNAMIC) ? -1 : 0];
++    (NV_USER_DYNAMIC_END < NV_USER_DYNAMIC) ? -1 : 1];
+ 
+ typedef struct
+ {
+@@ -2500,7 +2506,11 @@
+     case 0:
+         pAssert(FALSE);
+         break;
+-    case 1 ... 5:
++    case 1:
++    case 2:
++    case 3:
++    case 4:
++    case 5:
+         blob_version = 3;
+         break;
+     default:  // since StateFormatLevel 6
+@@ -4148,19 +4158,24 @@
+         rc = UINT16_Unmarshal(&array_size, buffer, size);
+     }
+     if (rc == TPM_RC_SUCCESS) {
+-        BYTE buf[array_size];
++        BYTE *buf = malloc(array_size > 0 ? array_size : 1);
+ 
+-        rc = Array_Unmarshal(buf, array_size, buffer, size);
+-        if (rc == TPM_RC_SUCCESS) {
+-            if (blob_version <= 4) {
+-                /* version <= 4 used COMPRESSED_LISTS and needs to be converted */
+-                rc = ConvertFromCompressedBitArray(buf, array_size,
+-                                                   data->ppList, sizeof(data->ppList));
+-            } else {
+-                memset(data->ppList, 0, sizeof(data->ppList));
+-                assert(array_size <= sizeof(data->ppList));
+-                memcpy(data->ppList, buf, array_size);
++        if (!buf) {
++            rc = TPM_RC_MEMORY;
++        } else {
++            rc = Array_Unmarshal(buf, array_size, buffer, size);
++            if (rc == TPM_RC_SUCCESS) {
++                if (blob_version <= 4) {
++                    /* version <= 4 used COMPRESSED_LISTS and needs to be converted */
++                    rc = ConvertFromCompressedBitArray(buf, array_size,
++                                                       data->ppList, sizeof(data->ppList));
++                } else {
++                    memset(data->ppList, 0, sizeof(data->ppList));
++                    assert(array_size <= sizeof(data->ppList));
++                    memcpy(data->ppList, buf, array_size);
++                }
+             }
++            free(buf);
+         }
+     }
+     return rc;
+@@ -4211,19 +4226,24 @@
+         rc = UINT16_Unmarshal(&array_size, buffer, size);
+     }
+     if (rc == TPM_RC_SUCCESS) {
+-        BYTE buf[array_size];
++        BYTE *buf = malloc(array_size > 0 ? array_size : 1);
+ 
+-        rc = Array_Unmarshal(buf, array_size, buffer, size);
+-        if (rc == TPM_RC_SUCCESS) {
+-            if (blob_version <= 4) {
+-                /* version <= 4 used COMPRESSED_LISTS and needs to be converted */
+-                rc = ConvertFromCompressedBitArray(buf, array_size,
+-                                                   data->auditCommands, sizeof(data->auditCommands));
+-            } else {
+-                memset(data->auditCommands, 0, sizeof(data->auditCommands));
+-                assert(array_size <= sizeof(data->auditCommands));
+-                memcpy(data->auditCommands, buf, array_size);
++        if (!buf) {
++            rc = TPM_RC_MEMORY;
++        } else {
++            rc = Array_Unmarshal(buf, array_size, buffer, size);
++            if (rc == TPM_RC_SUCCESS) {
++                if (blob_version <= 4) {
++                    /* version <= 4 used COMPRESSED_LISTS and needs to be converted */
++                    rc = ConvertFromCompressedBitArray(buf, array_size,
++                                                       data->auditCommands, sizeof(data->auditCommands));
++                } else {
++                    memset(data->auditCommands, 0, sizeof(data->auditCommands));
++                    assert(array_size <= sizeof(data->auditCommands));
++                    memcpy(data->auditCommands, buf, array_size);
++                }
+             }
++            free(buf);
+         }
+     }
+     return rc;
+@@ -4248,7 +4268,8 @@
+     case 0:
+         pAssert(FALSE);
+         break;
+-    case 1 ... 2:
++    case 1:
++    case 2:
+         blob_version = 4;
+         break;
+     default:
+@@ -4842,7 +4863,7 @@
+             datasize = entrysize - sizeof(UINT32) - sizeof(nvi);
+             written += UINT32_Marshal(&datasize, buffer, size);
+             if (datasize > 0) {
+-                BYTE buf[datasize];
++                BYTE *buf = alloca(datasize);
+                 NvRead(buf, entryRef + offset, datasize);
+                 written += Array_Marshal(buf, datasize, buffer, size);
+             }
+@@ -4965,7 +4986,7 @@
+                     goto exit_size;
+                 }
+                 if (rc == TPM_RC_SUCCESS && datasize > 0) {
+-                    BYTE buf[datasize];
++                    BYTE *buf = alloca(datasize);
+                     rc = Array_Unmarshal(buf, datasize, buffer, size);
+                     NvWrite(entryRef + o + offset, datasize, buf);
+                     offset += datasize;
