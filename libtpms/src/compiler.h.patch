@@ -1,0 +1,22 @@
+--- compiler.h.orig	2026-09-26 17:07:27 +0200
++++ compiler.h	2026-09-26 18:11:39 +0200
+@@ -38,7 +38,9 @@
+ #ifndef TPMLIB_COMPILER_H
+ #define TPMLIB_COMPILER_H
+ 
+-#ifndef __clang__
++#if defined(_MSC_VER) && !defined(__clang__)
++# define ATTRIBUTE_FORMAT(STRING_IDX, FIRST_TO_CHECK)
++#elif !defined(__clang__)
+ # define ATTRIBUTE_FORMAT(STRING_IDX, FIRST_TO_CHECK) \
+   __attribute__((format (printf, STRING_IDX, FIRST_TO_CHECK)))
+ #else
+@@ -47,6 +49,8 @@
+ #endif
+ #ifdef __GNUC__ /* gcc and clang */
+ # define LIBTPMS_ATTR_UNUSED __attribute__((unused))
++#elif defined(_MSC_VER)
++# define LIBTPMS_ATTR_UNUSED
+ #endif
+ 
+ #endif /* TPMLIB_COMPILER_H */
