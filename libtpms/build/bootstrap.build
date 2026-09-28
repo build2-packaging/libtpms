@@ -1,0 +1,7 @@
+project = libtpms
+
+using version
+using config
+using test
+using install
+using dist

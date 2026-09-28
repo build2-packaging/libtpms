@@ -1,0 +1,54 @@
+intf_libs = # Interface dependencies.
+impl_libs = # Implementation dependencies.
+#import xxxx_libs += libhello%lib{hello}
+
+# Public headers.
+#
+pub = [dir_path] ../include/libtpms/
+
+include $pub
+
+pub_hdrs = $($pub/ pub_hdrs)
+
+lib{tpms}: $pub/{$pub_hdrs}
+
+# Private headers and sources as well as dependencies.
+#
+lib{tpms}: {h c}{**} $impl_libs $intf_libs
+
+# Build options.
+#
+out_pfx_inc = [dir_path] $out_root/include/
+src_pfx_inc = [dir_path] $src_root/include/
+out_pfx_src = [dir_path] $out_root/src/
+src_pfx_src = [dir_path] $src_root/src/
+
+c.poptions =+ "-I$out_pfx_src" "-I$src_pfx_src" \
+              "-I$out_pfx_inc" "-I$src_pfx_inc"
+
+#obja{*}: c.poptions += -DLIBTPMS_STATIC_BUILD
+#objs{*}: c.poptions += -DLIBTPMS_SHARED_BUILD
+
+# Export options.
+#
+lib{tpms}:
+{
+  c.export.poptions = "-I$out_pfx_inc" "-I$src_pfx_inc"
+  c.export.libs = $intf_libs
+}
+
+#liba{tpms}: c.export.poptions += -DLIBTPMS_STATIC
+#libs{tpms}: c.export.poptions += -DLIBTPMS_SHARED
+
+# For pre-releases use the complete version to make sure they cannot
+# be used in place of another pre-release or the final version. See
+# the version module for details on the version.* variable values.
+#
+if $version.pre_release
+  lib{tpms}: bin.lib.version = "-$version.project_id"
+else
+  lib{tpms}: bin.lib.version = "-$version.major.$version.minor"
+
+# Don't install private headers.
+#
+h{*}: install = false
