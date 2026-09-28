@@ -1,0 +1,13 @@
+--- tpm_library_conf.h.orig	2026-09-26 17:07:27 +0200
++++ tpm_library_conf.h	2026-09-26 19:14:19 +0200
+@@ -168,5 +168,10 @@
+ #define TPM_MEDIUM_DURATION   (100 * 1000 * 1000)
+ #define TPM_LONG_DURATION     (300 * 1000 * 1000)
+ 
++#if defined(_MSC_VER)
++#include <stdarg.h>
++int vasprintf(char **strp, const char *fmt, va_list ap);
++int asprintf(char **strp, const char *fmt, ...);
++#endif
+ 
+ #endif /* TPM_LIBRARY_CONF_H */
