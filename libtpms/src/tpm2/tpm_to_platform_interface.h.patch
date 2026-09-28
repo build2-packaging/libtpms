@@ -1,0 +1,14 @@
+--- tpm_to_platform_interface.h.orig	2026-09-26 17:07:27 +0200
++++ tpm_to_platform_interface.h	2026-09-26 19:47:19 +0200
+@@ -138,6 +138,11 @@
+ 
+ 					// libtpms: added begin
+ #include <time.h>
++#ifdef TPM_WINDOWS
++typedef int clockid_t;
++#define CLOCK_REALTIME  0
++#define CLOCK_MONOTONIC 1
++#endif
+ void ClockAdjustPostResume(UINT64 backthen, BOOL timesAreRealtime);
+ uint64_t ClockGetTime(clockid_t clk_id);
+ 					// libtpms: added end
