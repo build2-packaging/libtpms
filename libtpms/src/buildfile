@@ -211,6 +211,17 @@ else
 
 tpm2/obj{**} obj{tpm_tpm2_*}: c.poptions += $tpm2_platform
 
+# Building with -Wall -Wextra -pedantic (see Step 9 of the packaging guide)
+# surfaces several -Wpedantic-only diagnostics in unmodified upstream TPM2
+# headers: a zero-size array in Global.h, stray top-level ';' in OIDs.h, a
+# non-constant initializer in TpmTypes.h, and __FUNCTION__ (a GNU extension)
+# in GpMacros.h. Neither GCC nor Clang has a dedicated flag for any of
+# these, and since -pedantic isn't part of this package's own coptions,
+# consumers never see them under a normal build.
+#
+if ($c.class == 'gcc')
+  tpm2/obj{**} obj{tpm_tpm2_*}: c.coptions += -Wno-pedantic
+
 if ($c.target.class == 'windows')
 {
   if ($c.target.system == 'mingw32')
